@@ -1,0 +1,9 @@
+{
+  "project_id": "replace-with-project-id",
+  "project_name": "hotel-security-threat-detection",
+  "org_id": "replace-with-org-id",
+  "appkey": "replace-with-appkey",
+  "region": "us-east",
+  "api_key": "ik_replace_with_admin_api_key",
+  "oss_host": "https://replace-with-appkey.us-east.insforge.app"
+}

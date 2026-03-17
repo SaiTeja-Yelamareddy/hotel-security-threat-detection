@@ -1,0 +1,70 @@
+@baseUrl = https://your-appkey.your-region.insforge.app
+@apiKey = ik_replace_with_real_admin_api_key
+@json = application/json
+
+### Get portal users
+GET {{baseUrl}}/api/database/records/portal_users?limit=200&order=created_at.asc
+Authorization: Bearer {{apiKey}}
+Content-Type: {{json}}
+
+### Create a portal user
+POST {{baseUrl}}/api/database/records/portal_users
+Authorization: Bearer {{apiKey}}
+Content-Type: {{json}}
+
+[
+  {
+    "full_name": "Security Member 3",
+    "username": "sec03",
+    "password_hash": "replace_with_sha256_hash",
+    "role": "security",
+    "created_by_username": "admin",
+    "is_active": true
+  }
+]
+
+### Update a portal user password hash
+PATCH {{baseUrl}}/api/database/records/portal_users?username=eq.sec01
+Authorization: Bearer {{apiKey}}
+Content-Type: {{json}}
+
+{
+  "password_hash": "replace_with_new_sha256_hash"
+}
+
+### Delete a security user
+DELETE {{baseUrl}}/api/database/records/portal_users?username=eq.sec02&role=eq.security
+Authorization: Bearer {{apiKey}}
+Content-Type: {{json}}
+
+### Get password reset requests
+GET {{baseUrl}}/api/database/records/portal_password_reset_requests?limit=100&order=requested_at.desc
+Authorization: Bearer {{apiKey}}
+Content-Type: {{json}}
+
+### Create a password reset request
+POST {{baseUrl}}/api/database/records/portal_password_reset_requests
+Authorization: Bearer {{apiKey}}
+Content-Type: {{json}}
+
+{
+  "username": "sec01",
+  "request_note": "Night shift user forgot password",
+  "status": "pending"
+}
+
+### Resolve a password reset request
+PATCH {{baseUrl}}/api/database/records/portal_password_reset_requests?id=eq.1
+Authorization: Bearer {{apiKey}}
+Content-Type: {{json}}
+
+{
+  "status": "resolved",
+  "resolved_by_username": "admin",
+  "resolved_at": "2026-03-17T00:00:00.000Z"
+}
+
+### Get threat intelligence records by category
+GET {{baseUrl}}/api/database/records/threat_intelligence_records?limit=8&order=detected_at.desc&category=eq.Fire%20Incident%20Threat
+Authorization: Bearer {{apiKey}}
+Content-Type: {{json}}
