@@ -38,6 +38,20 @@ All requests use a bearer token header:
 
 - `Authorization: Bearer <INSFORGE_API_KEY>`
 
+## GitHub Pages deployment (DB connection)
+
+The app now loads DB config from these sources (in order):
+
+1. `window.INSFORGE_CONFIG` (runtime global)
+2. Browser localStorage cache
+3. `insforge.config.json` (recommended for static hosting)
+4. `./.insforge/project.json` (local dev fallback)
+
+For GitHub Pages, add a root file named `insforge.config.json` based on
+`insforge.config.example.json`.
+
+> Use a **public/limited key** (or proxy through backend functions). Do not expose an unrestricted admin key in public repos.
+
 ## Important
 
 Do **not** commit the real `.insforge/project.json` file.

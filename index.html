@@ -2156,6 +2156,7 @@
 
   const DEFAULT_DB_BASE_URL = 'https://tv847whn.us-east.insforge.app';
   const PORTAL_SESSION_KEY = 'hotel_portal_session_v1';
+  const PUBLIC_INSFORGE_CONFIG_STORAGE_KEY = 'hotel_public_insforge_config_v1';
 
   function formatDateTimeShort(iso) {
     const d = new Date(iso);
@@ -2185,10 +2186,58 @@
   }
 
   function authDbHeaders() {
-    return {
-      Authorization: `Bearer ${state.dbApiKey}`,
+    const headers = {
       'Content-Type': 'application/json'
     };
+
+    if (state.dbApiKey) {
+      headers.Authorization = `Bearer ${state.dbApiKey}`;
+    }
+
+    return headers;
+  }
+
+  function normalizeInsforgeConfig(rawCfg) {
+    if (!rawCfg || typeof rawCfg !== 'object') return null;
+
+    const baseUrlRaw = rawCfg.oss_host || rawCfg.ossHost || rawCfg.baseUrl || rawCfg.dbBaseUrl || '';
+    const apiKeyRaw = rawCfg.api_key || rawCfg.apiKey || rawCfg.public_api_key || rawCfg.publicApiKey || '';
+
+    const baseUrl = String(baseUrlRaw || '').trim().replace(/\/+$/, '');
+    const apiKey = String(apiKeyRaw || '').trim();
+
+    if (!baseUrl && !apiKey) return null;
+    return { baseUrl, apiKey };
+  }
+
+  function applyInsforgeConfig(rawCfg) {
+    const cfg = normalizeInsforgeConfig(rawCfg);
+    if (!cfg) return false;
+
+    if (cfg.baseUrl) state.dbBaseUrl = cfg.baseUrl;
+    if (cfg.apiKey) state.dbApiKey = cfg.apiKey;
+
+    return true;
+  }
+
+  function tryReadStoredInsforgeConfig() {
+    try {
+      const raw = localStorage.getItem(PUBLIC_INSFORGE_CONFIG_STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function tryFetchInsforgeConfig(path) {
+    try {
+      const response = await fetch(path, { cache: 'no-store' });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (_) {
+      return null;
+    }
   }
 
   function normalizePortalUser(row) {
@@ -2206,8 +2255,8 @@
 
   async function fetchPortalUsers() {
     await loadInsforgeConfig();
-    if (!state.dbBaseUrl || !state.dbApiKey) {
-      throw new Error('Insforge DB credentials unavailable.');
+    if (!state.dbBaseUrl) {
+      throw new Error('Insforge DB host unavailable.');
     }
 
     const params = new URLSearchParams({
@@ -2232,8 +2281,8 @@
     if (!username) return null;
     await loadInsforgeConfig();
 
-    if (!state.dbBaseUrl || !state.dbApiKey) {
-      throw new Error('Insforge DB credentials unavailable.');
+    if (!state.dbBaseUrl) {
+      throw new Error('Insforge DB host unavailable.');
     }
 
     const normalized = String(username).trim().toLowerCase();
@@ -2256,8 +2305,8 @@
 
   async function createPortalUserRecord(userRecord) {
     await loadInsforgeConfig();
-    if (!state.dbBaseUrl || !state.dbApiKey) {
-      throw new Error('Insforge DB credentials unavailable.');
+    if (!state.dbBaseUrl) {
+      throw new Error('Insforge DB host unavailable.');
     }
 
     const response = await fetch(`${state.dbBaseUrl}/api/database/records/portal_users`, {
@@ -2273,8 +2322,8 @@
 
   async function updatePortalUserByUsername(username, patchData) {
     await loadInsforgeConfig();
-    if (!state.dbBaseUrl || !state.dbApiKey) {
-      throw new Error('Insforge DB credentials unavailable.');
+    if (!state.dbBaseUrl) {
+      throw new Error('Insforge DB host unavailable.');
     }
 
     const params = new URLSearchParams();
@@ -2293,8 +2342,8 @@
 
   async function deletePortalSecurityUser(username) {
     await loadInsforgeConfig();
-    if (!state.dbBaseUrl || !state.dbApiKey) {
-      throw new Error('Insforge DB credentials unavailable.');
+    if (!state.dbBaseUrl) {
+      throw new Error('Insforge DB host unavailable.');
     }
 
     const params = new URLSearchParams();
@@ -2313,8 +2362,8 @@
 
   async function fetchResetRequests() {
     await loadInsforgeConfig();
-    if (!state.dbBaseUrl || !state.dbApiKey) {
-      throw new Error('Insforge DB credentials unavailable.');
+    if (!state.dbBaseUrl) {
+      throw new Error('Insforge DB host unavailable.');
     }
 
     const params = new URLSearchParams({
@@ -2337,8 +2386,8 @@
 
   async function createResetRequest(username, requestNote) {
     await loadInsforgeConfig();
-    if (!state.dbBaseUrl || !state.dbApiKey) {
-      throw new Error('Insforge DB credentials unavailable.');
+    if (!state.dbBaseUrl) {
+      throw new Error('Insforge DB host unavailable.');
     }
 
     const payload = {
@@ -2360,8 +2409,8 @@
 
   async function updateResetRequestStatus(requestId, status) {
     await loadInsforgeConfig();
-    if (!state.dbBaseUrl || !state.dbApiKey) {
-      throw new Error('Insforge DB credentials unavailable.');
+    if (!state.dbBaseUrl) {
+      throw new Error('Insforge DB host unavailable.');
     }
 
     const params = new URLSearchParams();
@@ -2793,7 +2842,14 @@
       setAuthMessage('Login required.', '');
     } catch (error) {
       lockPortal();
-      setAuthMessage(error.message || 'Unable to connect to Insforge user database.', 'error');
+      const rawMessage = String(error?.message || 'Unable to connect to Insforge user database.');
+      const lowerMessage = rawMessage.toLowerCase();
+
+      if (lowerMessage.includes('401') || lowerMessage.includes('403') || lowerMessage.includes('credentials unavailable') || lowerMessage.includes('host unavailable')) {
+        setAuthMessage('DB not connected. For GitHub Pages, add insforge.config.json with oss_host + public API key.', 'error');
+      } else {
+        setAuthMessage(rawMessage, 'error');
+      }
     }
   }
 
@@ -2824,16 +2880,25 @@
     state.dbBaseUrl = DEFAULT_DB_BASE_URL;
     state.dbApiKey = '';
 
-    try {
-      const response = await fetch('./.insforge/project.json', { cache: 'no-store' });
-      if (response.ok) {
-        const cfg = await response.json();
-        state.dbBaseUrl = cfg.oss_host || state.dbBaseUrl;
-        state.dbApiKey = cfg.api_key || '';
+    // 1) Runtime global injected in hosting platform
+    applyInsforgeConfig(window.INSFORGE_CONFIG);
+
+    // 2) Previously saved public config in browser storage
+    applyInsforgeConfig(tryReadStoredInsforgeConfig());
+
+    // 3) Static deploy-time config (recommended for GitHub Pages)
+    const deployCfg = await tryFetchInsforgeConfig('./insforge.config.json');
+    if (applyInsforgeConfig(deployCfg)) {
+      try {
+        localStorage.setItem(PUBLIC_INSFORGE_CONFIG_STORAGE_KEY, JSON.stringify(deployCfg));
+      } catch (_) {
+        // Ignore storage write failures.
       }
-    } catch (_) {
-      // Keep fallback base URL; key may be unavailable in strict hosting setups.
     }
+
+    // 4) Local dev fallback (not available on GitHub Pages)
+    const localCfg = await tryFetchInsforgeConfig('./.insforge/project.json');
+    applyInsforgeConfig(localCfg);
 
     state.dbConfigLoaded = true;
   }
@@ -3683,8 +3748,8 @@
   async function fetchCategoryRecords(category) {
     await loadInsforgeConfig();
 
-    if (!state.dbBaseUrl || !state.dbApiKey) {
-      throw new Error('Database credentials unavailable. Ensure linked project config is accessible.');
+    if (!state.dbBaseUrl) {
+      throw new Error('Database host unavailable. Configure insforge.config.json.');
     }
 
     const params = new URLSearchParams({
@@ -3696,10 +3761,7 @@
     const url = `${state.dbBaseUrl}/api/database/records/threat_intelligence_records?${params.toString()}`;
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${state.dbApiKey}`,
-        'Content-Type': 'application/json'
-      }
+      headers: authDbHeaders()
     });
 
     if (!response.ok) {
